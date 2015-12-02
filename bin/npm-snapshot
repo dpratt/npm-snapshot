@@ -19,33 +19,42 @@ function getPkg() {
   } catch(e) {
     error('Could not open a package.json.');
   }
-};
+}
 
-function getCurrentVersion() {
-  return getPkg().version;
-};
-
-const oldVersion = getCurrentVersion();
-
+const oldVersion = getPkg().version;
 if (!oldVersion) error('No version in package.json found.');
-const buildNumber = process.argv[2];
-if (!buildNumber) error("No build number supplied.");
 
 const semver = semverUtil.parseSemver(oldVersion);
 if(!semver) error("Could not parse version from package.json");
+
 let prereleaseTag = semver.release;
-if(prereleaseTag) {
-  //strip off everything after the first '.' (if present)
-  prereleaseTag = prereleaseTag.split('.')[0];
-} else {
-  prereleaseTag = "SNAPSHOT";
+let buildNumber = process.argv[2];
+
+if (prereleaseTag) {
+  const parts = prereleaseTag.split('.');
+
+  if (parts.length > 0) {
+    // strip off everything after the first '.' (if present)
+    prereleaseTag = parts[0];
+
+    if (!buildNumber && parts.length > 1) {
+      // use  build number if it hasn't been specified
+      const parsed = parseInt(parts[1]);
+
+      if (parsed) {
+        buildNumber = "" + ( parsed + 1 );
+      }
+    }
+  }
 }
 
-semver.release = prereleaseTag + '.' + buildNumber;
+semver.release = `${ prereleaseTag || "SNAPSHOT" }.${ buildNumber || "1" }`;
 const version = semverUtil.stringifySemver(semver);
 
-// Run npm verison without tagging
-const npm = spawn('npm', ['--no-git-tag-version', 'version', version]);
+console.log(`Setting version to ${version}`);
+
+// Run npm version without tagging
+const npm = spawn('npm', [ '--no-git-tag-version', 'version', version ]);
 npm.stderr.pipe(process.stderr);
 
 npm.on('close', function (code) {
@@ -53,4 +62,3 @@ npm.on('close', function (code) {
   process.stdout.write(prereleaseTag);
   process.exit(0);
 });
-
